@@ -138,7 +138,6 @@ def jail_start(module, iocell_path='/usr/local/sbin/iocell', argument=None, forc
     return uuid, _changed, _msg
 
 def _release_exists(module, iocell_path='/usr/local/sbin/iocell', release="10.3-RELEASE"):
-    release_path = "/iocell/releases/%s/root"
     cmd = "%s list -r | grep %s" % (iocell_path, release)
     rc = 1
     rc, out, err = module.run_command('/bin/sh -c "%s"' % cmd)
@@ -146,15 +145,21 @@ def _release_exists(module, iocell_path='/usr/local/sbin/iocell', release="10.3-
         return False
     return True
 
-def release_fetch(module, iocell_path='/usr/local/sbin/iocell', release="10.3-RELEASE", update=False):
+def release_fetch(module, iocell_path='/usr/local/sbin/iocell', release="11.1-RELEASE", ftpfiles=None, ftphost=None, ftpdir=None, update=False):
     _exists = _release_exists(module, iocell_path, release)
     _changed = False
 
     if _exists and not update:
         _msg =  "Release %s already present." % release
-    else:
+    elif (not _exists) or update:
         if not module.check_mode:
             cmd = "%s fetch release=%s" % (iocell_path, release)
+            if ftpfiles != "":
+                cmd += " ftpfiles={0}".format(ftpfiles)
+            if ftpdir != "":
+                cmd += " ftpdir={0}".format(ftpdir)
+            if ftphost != "":
+                cmd += " ftphost={0}".format(ftphost)
             rc = 1
             rc, out, err = module.run_command(cmd)
             if not rc == 0:
@@ -344,7 +349,10 @@ def main():
                 cmd          = dict(default="", required=False),
                 clone_from   = dict(default="", required=False),
                 release      = dict(default="", required=False),
-                update       = dict(default="", required=False)),
+                update       = dict(default=False, required=False),
+                ftpfiles     = dict(default="", required=False),
+                ftpdir       = dict(default="", required=False),
+                ftphost      = dict(default="", required=False))
     )
 
     iocell_path = module.get_bin_path('iocell', True)
@@ -356,10 +364,13 @@ def main():
     properties = p["properties"]
     force = p["force"]
     cmd = p["cmd"]
-    clone_from= p["clone_from"].replace('.', '')
+    clone_from = p["clone_from"].replace('.', '')
     user = p["user"] or "root"
     release = p["release"]
-    update = p["update"]
+    update = True if p["update"].lower() == "true" else False
+    ftpfiles = p["ftpfiles"]
+    ftphost = p["ftphost"]
+    ftpdir = p["ftpdir"]
 
     jail_identifier = (uuid or tag)
 
@@ -394,7 +405,7 @@ def main():
             msgs.append(_msg)
 
     elif p["state"] == "fetched":
-        changed, _msg = release_fetch(module, iocell_path, release, update)
+        changed, _msg = release_fetch(module, iocell_path, release, ftpfiles, ftphost, ftpdir, update)
         msgs.append(_msg)
 
     elif p["state"] == "set":
